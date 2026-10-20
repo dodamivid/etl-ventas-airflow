@@ -95,7 +95,7 @@ def validar_fila(fila, fecha):
     if not re.fullmatch(r"\d+(\.\d+)?", precio_texto):
         return None, "precio_invalido"
     precio = round(float(precio_texto), 2)
-    if precio <= 0:
+    if precio < 0:
         return None, "precio_invalido"
 
     cantidad = int(cantidad_texto)

@@ -58,3 +58,38 @@ def test_calidad_rechaza_sobre_el_umbral():
 #   - que revisar_calidad acepte una tasa exactamente igual al umbral
 #   - que revisar_calidad falle con un archivo vacío
 # Tip: @pytest.mark.parametrize te ahorra repetir la misma prueba muchas veces.
+
+
+# ---------- Paso 3.1: normalización y motivos de rechazo ----------
+
+def test_region_y_producto_se_normalizan():
+    registro, motivo = validar_fila(fila(region="  SUR ", producto=" AURICULARES"), FECHA)
+    assert motivo is None
+    assert registro["region"] == "Sur"
+    assert registro["producto"] == "Auriculares"
+
+
+@pytest.mark.parametrize(
+    "cambios, motivo_esperado",
+    [
+        ({"id_venta": "abc"}, "id_invalido"),
+        ({"id_venta": "0"}, "id_invalido"),
+        ({"id_venta": ""}, "id_invalido"),
+        ({"fecha": "2026-10-06"}, "fecha_distinta"),
+        ({"producto": "   "}, "producto_vacio"),
+        ({"cantidad": ""}, "cantidad_invalida"),
+        ({"cantidad": "0"}, "cantidad_invalida"),
+        ({"cantidad": "-2"}, "cantidad_invalida"),
+        ({"cantidad": "dos"}, "cantidad_invalida"),
+        ({"cantidad": "1.5"}, "cantidad_invalida"),
+        ({"precio_unitario": ""}, "precio_invalido"),
+        ({"precio_unitario": "0.00"}, "precio_invalido"),
+        ({"precio_unitario": "0.004"}, "precio_invalido"),
+        ({"precio_unitario": "45,50"}, "precio_invalido"),
+        ({"precio_unitario": "1e3"}, "precio_invalido"),
+    ],
+)
+def test_motivos_de_rechazo(cambios, motivo_esperado):
+    registro, motivo = validar_fila(fila(**cambios), FECHA)
+    assert registro is None
+    assert motivo == motivo_esperado

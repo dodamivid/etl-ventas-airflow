@@ -60,7 +60,55 @@ def validar_fila(fila, fecha):
     Pista: int() y float() aceptan cosas como "+3", "1_000", "1e3" o "nan".
     Con re.fullmatch puedes exigir que el texto tenga solo dígitos.
     """
-    raise NotImplementedError("Completa validar_fila")
+    # Regla 1: la línea debe tener exactamente las seis columnas
+    if "_sobrantes" in fila or None in fila.values():
+        return None, "columnas_incorrectas"
+
+    # Regla 2: id_venta solo dígitos y mayor que 0
+    id_texto = _texto(fila, "id_venta")
+    if not re.fullmatch(r"\d+", id_texto) or int(id_texto) <= 0:
+        return None, "id_invalido"
+
+    # Regla 3 (id_duplicado) se revisa en separar_ventas
+
+    # Regla 4: la fecha debe ser la que se está procesando
+    if _texto(fila, "fecha") != fecha:
+        return None, "fecha_distinta"
+
+    # Regla 5: región válida (se compara en minúsculas)
+    region = _texto(fila, "region").lower()
+    if region not in REGIONES:
+        return None, "region_invalida"
+
+    # Regla 6: producto no vacío
+    producto = _texto(fila, "producto")
+    if not producto:
+        return None, "producto_vacio"
+
+    # Regla 7: cantidad solo dígitos y mayor que 0
+    cantidad_texto = _texto(fila, "cantidad")
+    if not re.fullmatch(r"\d+", cantidad_texto) or int(cantidad_texto) <= 0:
+        return None, "cantidad_invalida"
+
+    # Regla 8: precio con punto decimal opcional, y > 0 ya redondeado
+    precio_texto = _texto(fila, "precio_unitario")
+    if not re.fullmatch(r"\d+(\.\d+)?", precio_texto):
+        return None, "precio_invalido"
+    precio = round(float(precio_texto), 2)
+    if precio <= 0:
+        return None, "precio_invalido"
+
+    cantidad = int(cantidad_texto)
+    registro = {
+        "id_venta": int(id_texto),
+        "fecha": fecha,
+        "region": region.capitalize(),
+        "producto": producto.capitalize(),
+        "cantidad": cantidad,
+        "precio_unitario": precio,
+        "total": round(cantidad * precio, 2),
+    }
+    return registro, None
 
 
 def separar_ventas(filas, fecha):
@@ -76,7 +124,33 @@ def separar_ventas(filas, fecha):
       línea 2 porque la 1 es el encabezado), id_venta (texto o None), motivo y
       fila_original (la fila como JSON, usa json.dumps(fila, ensure_ascii=False)).
     """
-    raise NotImplementedError("Completa separar_ventas")
+    limpias = []
+    rechazadas = []
+    ids_vistos = set()
+
+    for linea, fila in enumerate(filas, start=2):
+        registro, motivo = validar_fila(fila, fecha)
+
+        # Regla 3: id repetido. Solo aplica si la fila no falló ya por
+        # columnas_incorrectas o id_invalido (en ese caso se conserva ese motivo).
+        if motivo not in ("columnas_incorrectas", "id_invalido"):
+            id_numero = int(_texto(fila, "id_venta"))
+            if id_numero in ids_vistos:
+                registro, motivo = None, "id_duplicado"
+            # Se registra aunque la fila se rechace por otro motivo
+            ids_vistos.add(id_numero)
+
+        if motivo is None:
+            limpias.append(registro)
+        else:
+            rechazadas.append({
+                "linea": linea,
+                "id_venta": _texto(fila, "id_venta") or None,
+                "motivo": motivo,
+                "fila_original": json.dumps(fila, ensure_ascii=False),
+            })
+
+    return limpias, rechazadas
 
 
 def revisar_calidad(total_leidas, total_rechazadas, umbral=UMBRAL_RECHAZO):
@@ -84,4 +158,12 @@ def revisar_calidad(total_leidas, total_rechazadas, umbral=UMBRAL_RECHAZO):
 
     Lanza ValueError si el archivo no trae filas o si la tasa supera el umbral.
     """
-    raise NotImplementedError("Completa revisar_calidad")
+    if total_leidas <= 0:
+        raise ValueError("El archivo no trae filas")
+    tasa = total_rechazadas / total_leidas
+    if tasa > umbral:
+        raise ValueError(
+            f"Se rechazó el {tasa:.0%} de las filas ({total_rechazadas} de "
+            f"{total_leidas}); el máximo permitido es {umbral:.0%}"
+        )
+    return tasa
